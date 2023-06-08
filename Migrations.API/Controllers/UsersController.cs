@@ -55,11 +55,9 @@ namespace Migrations.API.Controllers
                 user.Name = Faker.Name.FullName();
                 user.Phone = Faker.Phone.Number();
                 user.Email = Faker.Internet.Email();
-                user.CreatedAt = now;
                 user.LastUpdatedTime = now;
             }
 
-            _context.UserProfile.UpdateRange(users);
             await _context.SaveChangesAsync(cancellationToken);
             return Ok(users);
         }
