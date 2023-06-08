@@ -22,15 +22,6 @@ namespace Migrations.API.Controllers
         }
 
         [HttpPost]
-        public async Task<ActionResult> Create([FromBody] UserProfile user, CancellationToken cancellationToken)
-        {
-            user.CreatedAt = user.LastUpdatedTime = DateTime.UtcNow;
-            await _context.UserProfile.AddAsync(user, cancellationToken);
-            await _context.SaveChangesAsync(cancellationToken);
-            return Ok(user);
-        }
-
-        [HttpPost]
         public async Task<ActionResult> CreateMany(int quantity, CancellationToken cancellationToken)
         {
             var users = new List<UserProfile>(quantity);
@@ -55,6 +46,25 @@ namespace Migrations.API.Controllers
         }
 
         [HttpPut]
+        public async Task<ActionResult> UpdateMany(int quantity, CancellationToken cancellationToken)
+        {
+            var users = await _context.UserProfile.OrderBy(x => Guid.NewGuid()).Take(quantity).ToListAsync();
+            foreach (var user in users)
+            {
+                var now = DateTime.UtcNow;
+                user.Name = Faker.Name.FullName();
+                user.Phone = Faker.Phone.Number();
+                user.Email = Faker.Internet.Email();
+                user.CreatedAt = now;
+                user.LastUpdatedTime = now;
+            }
+
+            _context.UserProfile.UpdateRange(users);
+            await _context.SaveChangesAsync(cancellationToken);
+            return Ok(users);
+        }
+
+        [HttpPut]
         public async Task<ActionResult> Update(Guid id, CancellationToken cancellationToken)
         {
             var user = await _context.UserProfile.FirstOrDefaultAsync(u => u.Id.Equals(id), cancellationToken);
@@ -63,6 +73,24 @@ namespace Migrations.API.Controllers
             user.Phone = Faker.Phone.Number();
             user.Email = Faker.Internet.Email();
 
+            await _context.SaveChangesAsync(cancellationToken);
+            return Ok(user);
+        }
+
+        [HttpPost]
+        public async Task<ActionResult> Create(CancellationToken cancellationToken)
+        {
+            var now = DateTime.UtcNow;
+            var user = new UserProfile
+            {
+                Id = Guid.NewGuid(),
+                Name = Faker.Name.FullName(),
+                Phone = Faker.Phone.Number(),
+                Email = Faker.Internet.Email(),
+                CreatedAt = now,
+                LastUpdatedTime = now
+            };
+            await _context.UserProfile.AddAsync(user, cancellationToken);
             await _context.SaveChangesAsync(cancellationToken);
             return Ok(user);
         }
@@ -81,5 +109,13 @@ namespace Migrations.API.Controllers
             return Ok(users);
         }
 
+        [HttpDelete]
+        public async Task<ActionResult> Delete(CancellationToken cancellationToken)
+        {
+            var users = await _context.UserProfile.Select(x => new UserProfile { Id = x.Id }).ToListAsync(cancellationToken);
+            _context.UserProfile.RemoveRange(users);
+            var result = await _context.SaveChangesAsync(cancellationToken);
+            return Ok(result);
+        }
     }
 }
