@@ -20,7 +20,7 @@ namespace Migrations.WorkerService
         {
             while (!stoppingToken.IsCancellationRequested)
             {
-                _logger.LogInformation("Worker running at: ", DateTimeOffset.Now);
+                _logger.LogInformation($"Worker running at: {DateTimeOffset.Now}");
 
                 using var scope = _serviceProvider.CreateScope();
                 var cloneUserContext = scope.ServiceProvider.GetService<CloneUserContext>();
@@ -38,7 +38,7 @@ namespace Migrations.WorkerService
 
                     if (latestUser != null)
                     {
-                        _logger.LogInformation("Lastest time: {time}", latestUser.LastUpdatedTime);
+                        _logger.LogInformation($"Last update time: {latestUser.LastUpdatedTime}");
 
                         var srcUsers = await userContext.UserProfile.AsNoTracking()
                             .Where(u => u.LastUpdatedTime > latestUser.LastUpdatedTime)
@@ -56,7 +56,7 @@ namespace Migrations.WorkerService
 
                             var needInsertUsers = srcUsers.Where(x => !needUpdateUserIds.Contains(x.Id));
 
-                            await cloneUserContext.UserProfile.AddRangeAsync(needInsertUsers, stoppingToken);
+                            cloneUserContext.UserProfile.AddRange(needInsertUsers);
 
                             var needUpdateUsers = srcUsers.Where(x => needUpdateUserIds.Contains(x.Id));
                             cloneUserContext.UserProfile.UpdateRange(needUpdateUsers);
@@ -72,10 +72,17 @@ namespace Migrations.WorkerService
                     {
                         _logger.LogInformation("Get data from source");
                         var srcUsers = await userContext.UserProfile.AsNoTracking().ToListAsync(stoppingToken);
-                        await cloneUserContext.UserProfile.AddRangeAsync(srcUsers.Cast<UserProfile>(), stoppingToken);
-                        var result = await cloneUserContext.SaveChangesAsync(stoppingToken);
-                        await transaction.CommitAsync(stoppingToken);
-                        _logger.LogInformation($"{result} items have been migrated");
+                        if (srcUsers.Any())
+                        {
+                            cloneUserContext.UserProfile.AddRange(srcUsers);
+                            var result = await cloneUserContext.SaveChangesAsync(stoppingToken);
+                            await transaction.CommitAsync(stoppingToken);
+                            _logger.LogInformation($"{result} items have been migrated");
+                        }
+                        else
+                        {
+                            _logger.LogInformation($"No items found");
+                        }
                     }
                 }
                 catch (Exception ex)

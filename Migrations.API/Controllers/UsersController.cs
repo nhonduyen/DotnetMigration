@@ -40,7 +40,7 @@ namespace Migrations.API.Controllers
                 users.Add(user);
             }
 
-            await _context.UserProfile.AddRangeAsync(users, cancellationToken);
+            _context.UserProfile.AddRange(users);
             await _context.SaveChangesAsync(cancellationToken);
             return Ok(users);
         }
@@ -88,7 +88,7 @@ namespace Migrations.API.Controllers
                 CreatedAt = now,
                 LastUpdatedTime = now
             };
-            await _context.UserProfile.AddAsync(user, cancellationToken);
+            _context.UserProfile.Add(user);
             await _context.SaveChangesAsync(cancellationToken);
             return Ok(user);
         }
@@ -110,9 +110,7 @@ namespace Migrations.API.Controllers
         [HttpDelete]
         public async Task<ActionResult> Delete(CancellationToken cancellationToken)
         {
-            var users = await _context.UserProfile.Select(x => new UserProfile { Id = x.Id }).ToListAsync(cancellationToken);
-            _context.UserProfile.RemoveRange(users);
-            var result = await _context.SaveChangesAsync(cancellationToken);
+            var result = await _context.Database.ExecuteSqlRawAsync("TRUNCATE TABLE UserProfile;", cancellationToken);
             return Ok(result);
         }
     }
