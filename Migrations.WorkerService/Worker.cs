@@ -49,16 +49,29 @@ namespace Migrations.WorkerService
                             var srcUserIds = srcUsers.Select(x => x.Id);
                             var srcUserRowVesrions = srcUsers.Select(x => x.RowVersion);
 
-                            var needUpdateUserIds = await cloneUserContext.UserProfile
+                            var needUpdateUsers = await cloneUserContext.UserProfile
                                 .Where(u => srcUserIds.Contains(u.Id) && !srcUserRowVesrions.Contains(u.RowVersion))
-                                .Select(x => x.Id)
+                                .Select(x => new UserProfile { Id = x.Id })
                                 .ToListAsync(stoppingToken);
+
+                            var needUpdateUserIds = needUpdateUsers.Select(x => x.Id);
 
                             var needInsertUsers = srcUsers.Where(x => !needUpdateUserIds.Contains(x.Id));
 
                             cloneUserContext.UserProfile.AddRange(needInsertUsers);
 
-                            var needUpdateUsers = srcUsers.Where(x => needUpdateUserIds.Contains(x.Id));
+                            needUpdateUsers = srcUsers.Where(x => needUpdateUserIds.Contains(x.Id))
+                                .Select(x => new UserProfile
+                                {
+                                    Id = x.Id,
+                                    Name = x.Name,
+                                    CreatedAt = x.CreatedAt,
+                                    LastUpdatedTime = x.LastUpdatedTime,
+                                    Email = x.Email,
+                                    Phone = x.Phone,
+                                    RowVersion = x.RowVersion
+                                }).ToList();
+
                             cloneUserContext.UserProfile.UpdateRange(needUpdateUsers);
 
                             var result = await cloneUserContext.SaveChangesAsync(stoppingToken);
