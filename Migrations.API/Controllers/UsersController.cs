@@ -41,7 +41,8 @@ namespace Migrations.API.Controllers
             }
 
             _context.UserProfile.AddRange(users);
-            await _context.SaveChangesAsync(cancellationToken);
+            var result = await _context.SaveChangesAsync(cancellationToken);
+            _logger.LogInformation($"{result} items have been created");
             return Ok(users);
         }
 
@@ -58,7 +59,8 @@ namespace Migrations.API.Controllers
                 user.LastUpdatedTime = now;
             }
 
-            await _context.SaveChangesAsync(cancellationToken);
+            var result = await _context.SaveChangesAsync(cancellationToken);
+            _logger.LogInformation($"{result} items have been updated");
             return Ok(users);
         }
 
@@ -71,7 +73,8 @@ namespace Migrations.API.Controllers
             user.Phone = Faker.Phone.Number();
             user.Email = Faker.Internet.Email();
 
-            await _context.SaveChangesAsync(cancellationToken);
+            var result = await _context.SaveChangesAsync(cancellationToken);
+            _logger.LogInformation($"{result} items have been updated; Id = {user.Id}");
             return Ok(user);
         }
 
@@ -89,7 +92,8 @@ namespace Migrations.API.Controllers
                 LastUpdatedTime = now
             };
             _context.UserProfile.Add(user);
-            await _context.SaveChangesAsync(cancellationToken);
+            var result = await _context.SaveChangesAsync(cancellationToken);
+            _logger.LogInformation($"{result} items have been created; Id = {user.Id}");
             return Ok(user);
         }
 
@@ -111,6 +115,7 @@ namespace Migrations.API.Controllers
         public async Task<ActionResult> Delete(CancellationToken cancellationToken)
         {
             var result = await _context.Database.ExecuteSqlRawAsync("TRUNCATE TABLE UserProfile;", cancellationToken);
+            _logger.LogInformation($"Table {nameof(UserProfile)}'s data has been deleted");
             return Ok(result);
         }
     }
