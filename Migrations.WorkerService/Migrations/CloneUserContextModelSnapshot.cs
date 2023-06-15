@@ -25,7 +25,6 @@ namespace Migrations.WorkerService.Migrations
             modelBuilder.Entity("Migrations.WorkerService.Models.UserProfile", b =>
                 {
                     b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
                         .HasColumnType("uniqueidentifier");
 
                     b.Property<DateTime>("CreatedAt")

@@ -12,6 +12,9 @@ namespace Migrations.WorkerService.Data
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
+            modelBuilder.Entity<UserProfile>()
+                .Property(e => e.RowVersion)
+                .IsConcurrencyToken(false);
         }
 
         public DbSet<UserProfile> UserProfile { get; set; }

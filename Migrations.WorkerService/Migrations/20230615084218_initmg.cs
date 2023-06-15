@@ -6,7 +6,7 @@ using Microsoft.EntityFrameworkCore.Migrations;
 namespace Migrations.WorkerService.Migrations
 {
     /// <inheritdoc />
-    public partial class Initmg : Migration
+    public partial class initmg : Migration
     {
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
@@ -19,9 +19,9 @@ namespace Migrations.WorkerService.Migrations
                     Name = table.Column<string>(type: "nvarchar(100)", maxLength: 100, nullable: false),
                     Email = table.Column<string>(type: "nvarchar(50)", maxLength: 50, nullable: false),
                     Phone = table.Column<string>(type: "nvarchar(50)", maxLength: 50, nullable: false),
-                    RowVersion = table.Column<byte[]>(type: "varbinary(18)", maxLength: 18, nullable: false),
                     CreatedAt = table.Column<DateTime>(type: "datetime2", nullable: false),
-                    LastUpdatedTime = table.Column<DateTime>(type: "datetime2", nullable: false)
+                    LastUpdatedTime = table.Column<DateTime>(type: "datetime2", nullable: false),
+                    RowVersion = table.Column<byte[]>(type: "varbinary(18)", maxLength: 18, nullable: false)
                 },
                 constraints: table =>
                 {

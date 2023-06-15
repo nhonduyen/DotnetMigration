@@ -53,6 +53,7 @@ namespace Migrations.API.Migrations
                         .IsConcurrencyToken()
                         .IsRequired()
                         .ValueGeneratedOnAddOrUpdate()
+                        .HasMaxLength(18)
                         .HasColumnType("rowversion");
 
                     b.HasKey("Id");

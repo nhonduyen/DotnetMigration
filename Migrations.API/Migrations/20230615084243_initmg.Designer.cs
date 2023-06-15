@@ -12,8 +12,8 @@ using Migrations.API.Data;
 namespace Migrations.API.Migrations
 {
     [DbContext(typeof(UserContext))]
-    [Migration("20230527124055_Initmg")]
-    partial class Initmg
+    [Migration("20230615084243_initmg")]
+    partial class initmg
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
@@ -56,6 +56,7 @@ namespace Migrations.API.Migrations
                         .IsConcurrencyToken()
                         .IsRequired()
                         .ValueGeneratedOnAddOrUpdate()
+                        .HasMaxLength(18)
                         .HasColumnType("rowversion");
 
                     b.HasKey("Id");

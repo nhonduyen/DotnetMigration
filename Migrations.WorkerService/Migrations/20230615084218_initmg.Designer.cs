@@ -12,8 +12,8 @@ using Migrations.WorkerService.Data;
 namespace Migrations.WorkerService.Migrations
 {
     [DbContext(typeof(CloneUserContext))]
-    [Migration("20230527123840_Initmg")]
-    partial class Initmg
+    [Migration("20230615084218_initmg")]
+    partial class initmg
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
@@ -28,7 +28,6 @@ namespace Migrations.WorkerService.Migrations
             modelBuilder.Entity("Migrations.WorkerService.Models.UserProfile", b =>
                 {
                     b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
                         .HasColumnType("uniqueidentifier");
 
                     b.Property<DateTime>("CreatedAt")
