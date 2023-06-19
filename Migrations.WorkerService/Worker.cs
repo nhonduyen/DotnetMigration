@@ -117,8 +117,9 @@ namespace Migrations.WorkerService
 
                         if (srcUsers.Count >= 1000)
                         {
+                            var userProfile = srcUsers.FirstOrDefault();
                             var datatable = _databaseService.ConvertListToDatatable(srcUsers);
-                            await _databaseService.ExecuteBulkCopyAsync(datatable, nameof(UserProfile), stoppingToken);
+                            await _databaseService.ExecuteBulkCopyAsync(datatable, userProfile, stoppingToken);
                             _logger.LogInformation($"{srcUsers.Count} items have been migrated");
                         }
                         if (srcUsers.Count > 0 && srcUsers.Count < 1000)

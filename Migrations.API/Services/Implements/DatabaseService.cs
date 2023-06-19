@@ -47,9 +47,13 @@ namespace Migrations.API.Services.Implements
             {
                 using var connection = new SqlConnection(_configuration.GetConnectionString("DefaultConnection"));
                 connection.Open();
-                using var bulk = new SqlBulkCopy(connection);
+
+                using var transaction = connection.BeginTransaction();
+                using var bulk = new SqlBulkCopy(connection, SqlBulkCopyOptions.Default, transaction);
                 bulk.BulkCopyTimeout = 60 * 5;
                 bulk.DestinationTableName = destinationTable.GetType().Name;
+                bulk.BatchSize = 2000;
+                bulk.NotifyAfter = 1000;
 
                 foreach (var map in MappingColumns(destinationTable))
                 {
@@ -58,7 +62,10 @@ namespace Migrations.API.Services.Implements
 
                 await bulk.WriteToServerAsync(dataTable, cancellationToken);
 
+                await transaction.CommitAsync(cancellationToken);
+
                 _logger.LogInformation($"Bulk copy {dataTable.Rows.Count} items sucess");
+
             }
             catch (Exception ex)
             {

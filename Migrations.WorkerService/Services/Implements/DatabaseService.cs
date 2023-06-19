@@ -49,9 +49,13 @@ namespace Migrations.WorkerService.Services.Implements
             {
                 using var connection = new SqlConnection(_configuration.GetConnectionString("TargetConnection"));
                 connection.Open();
-                using var bulk = new SqlBulkCopy(connection);
+
+                using var transaction = connection.BeginTransaction();
+                using var bulk = new SqlBulkCopy(connection, SqlBulkCopyOptions.Default, transaction);
                 bulk.BulkCopyTimeout = 60 * 5;
-                bulk.DestinationTableName = nameof(destinationTable);
+                bulk.DestinationTableName = destinationTable.GetType().Name;
+                bulk.BatchSize = 2000;
+                bulk.NotifyAfter = 1000;
 
                 foreach (var map in MappingColumns(destinationTable))
                 {
@@ -60,7 +64,10 @@ namespace Migrations.WorkerService.Services.Implements
                 
                 await bulk.WriteToServerAsync(dataTable, cancellationToken);
 
+                await transaction.CommitAsync(cancellationToken);
+
                 _logger.LogInformation($"Bulk copy {dataTable.Rows.Count} items sucess");
+
             }
             catch (Exception ex)
             {
@@ -73,10 +80,12 @@ namespace Migrations.WorkerService.Services.Implements
         {
             try
             {
+                
                 var columns = GetListColumns(destinationTable); 
                 string tempTableName = "#temptable_" + Guid.NewGuid().ToString("N");
                 using var connection = new SqlConnection(_configuration.GetConnectionString("TargetConnection"));
                 connection.Open();
+
                 var sqlCreateTempTable = $"SELECT TOP 0 {string.Join(",", columns)} INTO {tempTableName} FROM {destinationTable.GetType().Name}";
                 var command = new SqlCommand(sqlCreateTempTable, connection);
                 command.CommandTimeout = 120;
@@ -84,9 +93,12 @@ namespace Migrations.WorkerService.Services.Implements
                 await command.ExecuteNonQueryAsync(cancellationToken);
                 _logger.LogInformation(sqlCreateTempTable);
 
-                using var bulk = new SqlBulkCopy(connection);
+                using var transaction = connection.BeginTransaction();
+                using var bulk = new SqlBulkCopy(connection, SqlBulkCopyOptions.Default, transaction);
                 bulk.BulkCopyTimeout = 60 * 5;
                 bulk.DestinationTableName = tempTableName;
+                bulk.BatchSize = 2000;
+                bulk.NotifyAfter = 1000;
 
                 foreach (var map in MappingColumns(destinationTable))
                 {
@@ -94,12 +106,15 @@ namespace Migrations.WorkerService.Services.Implements
                 }
 
                 await bulk.WriteToServerAsync(dataTable, cancellationToken);
+                await transaction.CommitAsync(cancellationToken);
 
                 var sql = BuildMergeQuery(destinationTable.GetType().Name, tempTableName, destinationTable);
 
                 command.CommandText = sql;
                 await command.ExecuteNonQueryAsync(cancellationToken);
                 _logger.LogInformation(sql);
+
+                
             }
             catch (Exception ex)
             {
