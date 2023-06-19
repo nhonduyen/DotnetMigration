@@ -53,7 +53,7 @@ namespace Migrations.API.Controllers
             else
             {
                 var datatable = _databaseService.ConvertListToDatatable(users);
-                await _databaseService.ExecuteBulkCopyAsync(datatable, nameof(UserProfile), cancellationToken);
+                await _databaseService.ExecuteBulkCopyAsync(datatable, users.FirstOrDefault(), cancellationToken);
                 result = quantity;
                 _logger.LogInformation($"Bulk copy: {result} items have been created");
             }

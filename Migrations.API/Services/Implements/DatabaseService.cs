@@ -41,7 +41,7 @@ namespace Migrations.API.Services.Implements
             return dt;
         }
 
-        public async Task ExecuteBulkCopyAsync(DataTable dataTable, string destinationTable, CancellationToken cancellationToken = default)
+        public async Task ExecuteBulkCopyAsync(DataTable dataTable, object destinationTable, CancellationToken cancellationToken = default)
         {
             try
             {
@@ -49,9 +49,9 @@ namespace Migrations.API.Services.Implements
                 connection.Open();
                 using var bulk = new SqlBulkCopy(connection);
                 bulk.BulkCopyTimeout = 60 * 5;
-                bulk.DestinationTableName = destinationTable;
+                bulk.DestinationTableName = destinationTable.GetType().Name;
 
-                foreach (var map in MappingColumns())
+                foreach (var map in MappingColumns(destinationTable))
                 {
                     bulk.ColumnMappings.Add(map);
                 }
@@ -67,17 +67,27 @@ namespace Migrations.API.Services.Implements
             }
         }
 
-        private List<SqlBulkCopyColumnMapping> MappingColumns()
+        private List<string> GetListColumns(object o)
         {
-            return new List<SqlBulkCopyColumnMapping>()
+            var columns = new List<string>();
+            var properties = o.GetType().GetProperties().Where(x => !x.Name.Equals("RowVersion"));
+
+            foreach (var prop in properties)
             {
-                   new SqlBulkCopyColumnMapping("Id", "Id"),
-                   new SqlBulkCopyColumnMapping("Name", "Name"),
-                   new SqlBulkCopyColumnMapping("Email", "Email"),
-                   new SqlBulkCopyColumnMapping("Phone", "Phone"),
-                   new SqlBulkCopyColumnMapping("CreatedAt", "CreatedAt"),
-                   new SqlBulkCopyColumnMapping("LastUpdatedTime", "LastUpdatedTime")
-            };
+                columns.Add(prop.Name);
+            }
+            return columns;
+        }
+
+        private List<SqlBulkCopyColumnMapping> MappingColumns(object o)
+        {
+            var columnMapping = new List<SqlBulkCopyColumnMapping>();
+            var columns = GetListColumns(o);
+            foreach (var column in columns)
+            {
+                columnMapping.Add(new SqlBulkCopyColumnMapping(column, column));
+            }
+            return columnMapping;
         }
     }
 }

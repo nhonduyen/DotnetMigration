@@ -42,7 +42,7 @@ namespace Migrations.WorkerService.Services.Implements
             return dt;
         }
 
-        public async Task ExecuteBulkCopyAsync(DataTable dataTable, string destinationTable, CancellationToken cancellationToken = default)
+        public async Task ExecuteBulkCopyAsync(DataTable dataTable, object destinationTable, CancellationToken cancellationToken = default)
         {
             try
             {
@@ -50,9 +50,9 @@ namespace Migrations.WorkerService.Services.Implements
                 connection.Open();
                 using var bulk = new SqlBulkCopy(connection);
                 bulk.BulkCopyTimeout = 60 * 5;
-                bulk.DestinationTableName = destinationTable;
+                bulk.DestinationTableName = nameof(destinationTable);
 
-                foreach (var map in MappingColumns())
+                foreach (var map in MappingColumns(destinationTable))
                 {
                     bulk.ColumnMappings.Add(map);
                 }
@@ -68,14 +68,15 @@ namespace Migrations.WorkerService.Services.Implements
             }
         }
 
-        public async Task ExecuteMergeDataAsync(DataTable dataTable, string destinationTable, CancellationToken cancellationToken = default)
+        public async Task ExecuteMergeDataAsync(DataTable dataTable, object destinationTable, CancellationToken cancellationToken = default)
         {
             try
             {
+                var columns = GetListColumns(destinationTable); 
                 string tempTableName = "#temptable_" + Guid.NewGuid().ToString("N");
                 using var connection = new SqlConnection(_configuration.GetConnectionString("TargetConnection"));
                 connection.Open();
-                var sqlCreateTempTable = $"CREATE TABLE {tempTableName}(Id uniqueidentifier primary key,Name NVARCHAR(100), Email NVARCHAR(50),Phone NVARCHAR(50),CreatedAt datetime2, LastUpdatedTime datetime2,RowVersion varbinary(18));";
+                var sqlCreateTempTable = $"SELECT TOP 0 {string.Join(",", columns)} INTO {tempTableName} FROM {destinationTable.GetType().Name}";
                 var command = new SqlCommand(sqlCreateTempTable, connection);
                 command.CommandTimeout = 120;
 
@@ -86,18 +87,15 @@ namespace Migrations.WorkerService.Services.Implements
                 bulk.BulkCopyTimeout = 60 * 5;
                 bulk.DestinationTableName = tempTableName;
 
-                foreach (var map in MappingColumns())
+                foreach (var map in MappingColumns(destinationTable))
                 {
                     bulk.ColumnMappings.Add(map);
                 }
 
                 await bulk.WriteToServerAsync(dataTable, cancellationToken);
 
-                var sql = string.Format(@"
-MERGE INTO {0} AS TARGET USING {1} AS SOURCE ON TARGET.ID=SOURCE.ID
-WHEN MATCHED THEN UPDATE SET TARGET.NAME=SOURCE.NAME, TARGET.EMAIL=SOURCE.EMAIL,TARGET.PHONE=SOURCE.PHONE, TARGET.CreatedAt=SOURCE.CreatedAt,TARGET.LastUpdatedTime=SOURCE.LastUpdatedTime,TARGET.RowVersion=SOURCE.RowVersion
-WHEN NOT MATCHED THEN INSERT(ID,NAME,EMAIL,PHONE,CreatedAt,LastUpdatedTime,RowVersion) VALUES(SOURCE.ID,SOURCE.NAME,SOURCE.EMAIL,SOURCE.PHONE,SOURCE.CreatedAt,SOURCE.LastUpdatedTime,SOURCE.RowVersion);
-", destinationTable, tempTableName);
+                var sql = BuildMergeQuery(destinationTable.GetType().Name, tempTableName, destinationTable);
+
                 command.CommandText = sql;
                 await command.ExecuteNonQueryAsync(cancellationToken);
                 _logger.LogInformation(sql);
@@ -110,18 +108,50 @@ WHEN NOT MATCHED THEN INSERT(ID,NAME,EMAIL,PHONE,CreatedAt,LastUpdatedTime,RowVe
  
         }
 
-        private List<SqlBulkCopyColumnMapping> MappingColumns()
+        private List<SqlBulkCopyColumnMapping> MappingColumns(object o)
         {
-            return new List<SqlBulkCopyColumnMapping>()
+            var columnMapping = new List<SqlBulkCopyColumnMapping>();
+            var columns = GetListColumns(o);
+            foreach (var column in columns)
             {
-                   new SqlBulkCopyColumnMapping("Id", "Id"),
-                   new SqlBulkCopyColumnMapping("Name", "Name"),
-                   new SqlBulkCopyColumnMapping("Email", "Email"),
-                   new SqlBulkCopyColumnMapping("Phone", "Phone"),
-                   new SqlBulkCopyColumnMapping("CreatedAt", "CreatedAt"),
-                   new SqlBulkCopyColumnMapping("LastUpdatedTime", "LastUpdatedTime"),
-                   new SqlBulkCopyColumnMapping("RowVersion", "RowVersion")
-            };
+                columnMapping.Add(new SqlBulkCopyColumnMapping(column, column));
+            }
+            return columnMapping;
+        }
+
+        private List<string> GetListColumns(object o)
+        {
+            var columns = new List<string>();
+            var properties = o.GetType().GetProperties();
+
+            foreach (var prop in properties)
+            {
+                columns.Add(prop.Name);
+            }
+            return columns;
+        }
+
+        private string BuildMergeQuery(string src, string dest, object o)
+        {
+            var columns = GetListColumns(o);
+
+            var updatePhase = string.Empty;
+            var insertPhase = string.Empty;
+            foreach (var column in columns)
+            {
+                if (!column.Equals("Id"))
+                {
+                    updatePhase += $"TARGET.{column}=SOURCE.{column},";
+                }
+                insertPhase += $"SOURCE.{column},";
+            }
+            updatePhase = updatePhase.Remove(updatePhase.Length - 1);
+            insertPhase = insertPhase.Remove(insertPhase.Length - 1);
+
+            var sql = string.Format(@"MERGE INTO {0} AS TARGET USING {1} AS SOURCE ON TARGET.ID=SOURCE.ID WHEN MATCHED THEN UPDATE SET {2} WHEN NOT MATCHED THEN INSERT({3}) VALUES({4});",
+                src, dest, updatePhase, string.Join(",", columns), insertPhase);
+
+            return sql;
         }
     }
 }

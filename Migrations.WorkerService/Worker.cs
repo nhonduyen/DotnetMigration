@@ -62,8 +62,10 @@ namespace Migrations.WorkerService
                                 RowVersion = x.RowVersion
                             }).ToList();
 
+                            var userProfile = cloneUsers.FirstOrDefault();
+
                             var datatable = _databaseService.ConvertListToDatatable(cloneUsers);
-                            await _databaseService.ExecuteMergeDataAsync(datatable, nameof(UserProfile), stoppingToken);
+                            await _databaseService.ExecuteMergeDataAsync(datatable, userProfile, stoppingToken);
                             _logger.LogInformation($"{cloneUsers.Count} items have been migrated");
                            
                         }
