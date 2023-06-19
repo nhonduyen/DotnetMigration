@@ -5,6 +5,7 @@ using Migrations.API.Data;
 using Migrations.API.Models;
 using Faker;
 using System.ComponentModel.DataAnnotations;
+using Migrations.API.Services.Interfaces;
 
 namespace Migrations.API.Controllers
 {
@@ -13,11 +14,13 @@ namespace Migrations.API.Controllers
     public class UsersController : ControllerBase
     {
         private readonly UserContext _context;
+        private readonly IDatabaseService _databaseService;
         private readonly ILogger<UsersController> _logger;
 
-        public UsersController(UserContext context, ILogger<UsersController> logger)
+        public UsersController(UserContext context, IDatabaseService databaseService, ILogger<UsersController> logger)
         {
             _context = context;
+            _databaseService = databaseService;
             _logger = logger;
         }
 
@@ -29,17 +32,33 @@ namespace Migrations.API.Controllers
             {
                 var user = new UserProfile
                 {
+                    Id = Guid.NewGuid(),
                     Name = Faker.Name.FullName(),
                     Phone = Faker.Phone.Number(),
-                    Email = Faker.Internet.Email()
+                    Email = Faker.Internet.Email(),
+                    CreatedAt = DateTime.UtcNow,
+                    LastUpdatedTime = DateTime.UtcNow
                 };
                 users.Add(user);
             }
 
-            _context.UserProfile.AddRange(users);
-            var result = await _context.SaveChangesAsync(cancellationToken);
-            _logger.LogInformation($"{result} items have been created");
-            return Ok(users);
+            var result = 0;
+
+            if (quantity < 1000)
+            {
+                _context.UserProfile.AddRange(users);
+                result = await _context.SaveChangesAsync(cancellationToken);
+                _logger.LogInformation($"{result} items have been created");
+            }
+            else
+            {
+                var datatable = _databaseService.ConvertListToDatatable(users);
+                await _databaseService.ExecuteBulkCopyAsync(datatable, nameof(UserProfile), cancellationToken);
+                result = quantity;
+                _logger.LogInformation($"Bulk copy: {result} items have been created");
+            }
+            
+            return Ok(result);
         }
 
         [HttpPut]
@@ -56,7 +75,7 @@ namespace Migrations.API.Controllers
             _context.UserProfile.UpdateRange(users);
             var result = await _context.SaveChangesAsync(cancellationToken);
             _logger.LogInformation($"{result} items have been updated");
-            return Ok(users);
+            return Ok(result);
         }
 
         [HttpPut]

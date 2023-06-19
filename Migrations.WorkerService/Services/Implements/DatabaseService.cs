@@ -21,7 +21,7 @@ namespace Migrations.WorkerService.Services.Implements
         {
             var item = list.FirstOrDefault();
             DataTable dt = new DataTable();
-            var properties = item.GetType().GetProperties();
+            var properties = item.GetType().GetProperties().OrderBy(x => x.Name);
 
             foreach (var prop in properties)
             {
@@ -31,7 +31,7 @@ namespace Migrations.WorkerService.Services.Implements
             foreach (var i in list)
             {
                 var row = dt.NewRow();
-                var props = i.GetType().GetProperties();
+                var props = i.GetType().GetProperties().OrderBy(x => x.Name);
                 foreach (var prop in props)
                 {
                     row[prop.Name] = prop.GetValue(i, null);
@@ -51,10 +51,19 @@ namespace Migrations.WorkerService.Services.Implements
                 using var bulk = new SqlBulkCopy(connection);
                 bulk.BulkCopyTimeout = 60 * 5;
                 bulk.DestinationTableName = destinationTable;
+
+                foreach (var map in MappingColumns())
+                {
+                    bulk.ColumnMappings.Add(map);
+                }
+                
                 await bulk.WriteToServerAsync(dataTable, cancellationToken);
+
+                _logger.LogInformation($"Bulk copy {dataTable.Rows.Count} items sucess");
             }
             catch (Exception ex)
             {
+                _logger.LogError($"Error {ex.Message}");
                 throw ex;
             }
         }
@@ -66,7 +75,7 @@ namespace Migrations.WorkerService.Services.Implements
                 string tempTableName = "#temptable_" + Guid.NewGuid().ToString("N");
                 using var connection = new SqlConnection(_configuration.GetConnectionString("TargetConnection"));
                 connection.Open();
-                var sqlCreateTempTable = $"CREATE TABLE {tempTableName}(NAME NVARCHAR(100), EMAIL NVARCHAR(50),PHONE NVARCHAR(50),ID uniqueidentifier,CreatedAt datetime2, LastUpdatedTime datetime2,RowVersion varbinary(18));";
+                var sqlCreateTempTable = $"CREATE TABLE {tempTableName}(Id uniqueidentifier primary key,Name NVARCHAR(100), Email NVARCHAR(50),Phone NVARCHAR(50),CreatedAt datetime2, LastUpdatedTime datetime2,RowVersion varbinary(18));";
                 var command = new SqlCommand(sqlCreateTempTable, connection);
                 command.CommandTimeout = 120;
 
@@ -76,6 +85,12 @@ namespace Migrations.WorkerService.Services.Implements
                 using var bulk = new SqlBulkCopy(connection);
                 bulk.BulkCopyTimeout = 60 * 5;
                 bulk.DestinationTableName = tempTableName;
+
+                foreach (var map in MappingColumns())
+                {
+                    bulk.ColumnMappings.Add(map);
+                }
+
                 await bulk.WriteToServerAsync(dataTable, cancellationToken);
 
                 var sql = string.Format(@"
@@ -89,9 +104,24 @@ WHEN NOT MATCHED THEN INSERT(ID,NAME,EMAIL,PHONE,CreatedAt,LastUpdatedTime,RowVe
             }
             catch (Exception ex)
             {
+                _logger.LogError($"Error {ex.Message}");
                 throw ex;
             }
  
+        }
+
+        private List<SqlBulkCopyColumnMapping> MappingColumns()
+        {
+            return new List<SqlBulkCopyColumnMapping>()
+            {
+                   new SqlBulkCopyColumnMapping("Id", "Id"),
+                   new SqlBulkCopyColumnMapping("Name", "Name"),
+                   new SqlBulkCopyColumnMapping("Email", "Email"),
+                   new SqlBulkCopyColumnMapping("Phone", "Phone"),
+                   new SqlBulkCopyColumnMapping("CreatedAt", "CreatedAt"),
+                   new SqlBulkCopyColumnMapping("LastUpdatedTime", "LastUpdatedTime"),
+                   new SqlBulkCopyColumnMapping("RowVersion", "RowVersion")
+            };
         }
     }
 }

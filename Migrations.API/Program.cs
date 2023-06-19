@@ -1,5 +1,7 @@
 using Migrations.API.Data;
 using Microsoft.EntityFrameworkCore;
+using Migrations.API.Services.Interfaces;
+using Migrations.API.Services.Implements;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -14,6 +16,8 @@ builder.Services.AddDbContext<UserContext>(option =>
 {
     option.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection"), providerOptions => providerOptions.CommandTimeout(120));
 });
+
+builder.Services.AddScoped<IDatabaseService, DatabaseService>();
 
 var app = builder.Build();
 

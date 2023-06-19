@@ -49,47 +49,42 @@ namespace Migrations.WorkerService
                             .Where(u => u.LastUpdatedTime > latestUser.LastUpdatedTime)
                             .ToListAsync(stoppingToken);
 
-                        if (srcUsers.Any())
+                        if (srcUsers.Count >= 1000)
                         {
-                            if (srcUsers.Count < 1000)
+                            var cloneUsers = srcUsers.Select(x => new UserProfile
                             {
-                                var srcUserIds = srcUsers.Select(x => x.Id);
-                                var srcUserRowVesrions = srcUsers.Select(x => x.RowVersion);
+                                Id = x.Id,
+                                Name = x.Name,
+                                CreatedAt = x.CreatedAt,
+                                LastUpdatedTime = x.LastUpdatedTime,
+                                Email = x.Email,
+                                Phone = x.Phone,
+                                RowVersion = x.RowVersion
+                            }).ToList();
 
-                                var needUpdateUsers = await cloneUserContext.UserProfile
-                                    .Where(u => srcUserIds.Contains(u.Id) && !srcUserRowVesrions.Contains(u.RowVersion))
-                                    .Select(x => new UserProfile { Id = x.Id })
-                                    .ToListAsync(stoppingToken);
+                            var datatable = _databaseService.ConvertListToDatatable(cloneUsers);
+                            await _databaseService.ExecuteMergeDataAsync(datatable, nameof(UserProfile), stoppingToken);
+                            _logger.LogInformation($"{cloneUsers.Count} items have been migrated");
+                           
+                        }
+                        else if (srcUsers.Count >  0 && srcUsers.Count < 1000)
+                        {
+                            var srcUserIds = srcUsers.Select(x => x.Id);
+                            var srcUserRowVesrions = srcUsers.Select(x => x.RowVersion);
 
-                                var needUpdateUserIds = needUpdateUsers.Select(x => x.Id);
+                            var needUpdateUsers = await cloneUserContext.UserProfile
+                                .Where(u => srcUserIds.Contains(u.Id) && !srcUserRowVesrions.Contains(u.RowVersion))
+                                .Select(x => new UserProfile { Id = x.Id })
+                                .ToListAsync(stoppingToken);
 
-                                var needInsertUsers = srcUsers.Where(x => !needUpdateUserIds.Contains(x.Id));
+                            var needUpdateUserIds = needUpdateUsers.Select(x => x.Id);
 
-                                cloneUserContext.UserProfile.AddRange(needInsertUsers);
+                            var needInsertUsers = srcUsers.Where(x => !needUpdateUserIds.Contains(x.Id));
 
-                                needUpdateUsers = srcUsers.Where(x => needUpdateUserIds.Contains(x.Id))
-                                    .Select(x => new UserProfile
-                                    {
-                                        Id = x.Id,
-                                        Name = x.Name,
-                                        CreatedAt = x.CreatedAt,
-                                        LastUpdatedTime = x.LastUpdatedTime,
-                                        Email = x.Email,
-                                        Phone = x.Phone,
-                                        RowVersion = x.RowVersion
-                                    }).ToList();
+                            cloneUserContext.UserProfile.AddRange(needInsertUsers);
 
-                                cloneUserContext.UserProfile.UpdateRange(needUpdateUsers);
-
-                                var result = await cloneUserContext.SaveChangesAsync(stoppingToken);
-
-                                await transaction.CommitAsync(stoppingToken);
-
-                                _logger.LogInformation($"{result} items have been migrated");
-                            }
-                            else
-                            {
-                                var cloneUsers = srcUsers.Select(x => new UserProfile
+                            needUpdateUsers = srcUsers.Where(x => needUpdateUserIds.Contains(x.Id))
+                                .Select(x => new UserProfile
                                 {
                                     Id = x.Id,
                                     Name = x.Name,
@@ -100,33 +95,42 @@ namespace Migrations.WorkerService
                                     RowVersion = x.RowVersion
                                 }).ToList();
 
-                                var datatable = _databaseService.ConvertListToDatatable(cloneUsers);
-                                await _databaseService.ExecuteMergeDataAsync(datatable, nameof(UserProfile), stoppingToken);
-                                _logger.LogInformation($"{cloneUsers.Count} items have been migrated");
-                            }
+                            cloneUserContext.UserProfile.UpdateRange(needUpdateUsers);
+
+                            var result = await cloneUserContext.SaveChangesAsync(stoppingToken);
+
+                            await transaction.CommitAsync(stoppingToken);
+
+                            _logger.LogInformation($"{result} items have been migrated");
+                        }
+                        else
+                        {
+                            _logger.LogInformation("No data needs to migrated");
                         }
                     }
                     else
                     {
                         _logger.LogInformation("Get data from source");
                         var srcUsers = await userContext.UserProfile.AsNoTracking().ToListAsync(stoppingToken);
-                        if (srcUsers.Count < 1000)
+
+                        if (srcUsers.Count >= 1000)
+                        {
+                            var datatable = _databaseService.ConvertListToDatatable(srcUsers);
+                            await _databaseService.ExecuteBulkCopyAsync(datatable, nameof(UserProfile), stoppingToken);
+                            _logger.LogInformation($"{srcUsers.Count} items have been migrated");
+                        }
+                        if (srcUsers.Count > 0 && srcUsers.Count < 1000)
                         {
                             cloneUserContext.UserProfile.AddRange(srcUsers);
                             var result = await cloneUserContext.SaveChangesAsync(stoppingToken);
                             await transaction.CommitAsync(stoppingToken);
                             _logger.LogInformation($"{result} items have been migrated");
                         }
-                        else if (srcUsers.Count > 1000)
-                        {
-                            var datatable = _databaseService.ConvertListToDatatable(srcUsers);
-                            await _databaseService.ExecuteBulkCopyAsync(datatable, nameof(UserProfile), stoppingToken);
-                            _logger.LogInformation($"{srcUsers.Count} items have been migrated");
-                        }
                         else
                         {
-                            _logger.LogInformation($"No items found");
+                            _logger.LogInformation("Table is empty");
                         }
+
                     }
                 }
                 catch (Exception ex)
