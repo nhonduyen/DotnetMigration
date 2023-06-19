@@ -1,5 +1,6 @@
 ﻿using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Metadata.Internal;
 using Migrations.WorkerService.Models;
 using Migrations.WorkerService.Services.Interfaces;
 using System.Data;
@@ -135,21 +136,11 @@ namespace Migrations.WorkerService.Services.Implements
         {
             var columns = GetListColumns(o);
 
-            var updatePhase = string.Empty;
-            var insertPhase = string.Empty;
-            foreach (var column in columns)
-            {
-                if (!column.Equals("Id"))
-                {
-                    updatePhase += $"TARGET.{column}=SOURCE.{column},";
-                }
-                insertPhase += $"SOURCE.{column},";
-            }
-            updatePhase = updatePhase.Remove(updatePhase.Length - 1);
-            insertPhase = insertPhase.Remove(insertPhase.Length - 1);
+            var updatePhase = columns.Where(c => !c.Equals("Id")).Select(x => $"TARGET.{x}=SOURCE.{x}");
+            var insertPhase = columns.Select(x => $"SOURCE.{x}");
 
             var sql = string.Format(@"MERGE INTO {0} AS TARGET USING {1} AS SOURCE ON TARGET.ID=SOURCE.ID WHEN MATCHED THEN UPDATE SET {2} WHEN NOT MATCHED THEN INSERT({3}) VALUES({4});",
-                src, dest, updatePhase, string.Join(",", columns), insertPhase);
+                src, dest, string.Join(",", updatePhase), string.Join(",", columns), string.Join(",", insertPhase));
 
             return sql;
         }
