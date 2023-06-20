@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore.Metadata.Internal;
 using Migrations.WorkerService.Models;
 using Migrations.WorkerService.Services.Interfaces;
 using System.Data;
+using System.Diagnostics;
 
 namespace Migrations.WorkerService.Services.Implements
 {
@@ -22,7 +23,7 @@ namespace Migrations.WorkerService.Services.Implements
         {
             var item = list.FirstOrDefault();
             DataTable dt = new DataTable();
-            var properties = item.GetType().GetProperties().OrderBy(x => x.Name);
+            var properties = item.GetType().GetProperties();
 
             foreach (var prop in properties)
             {
@@ -32,7 +33,7 @@ namespace Migrations.WorkerService.Services.Implements
             foreach (var i in list)
             {
                 var row = dt.NewRow();
-                var props = i.GetType().GetProperties().OrderBy(x => x.Name);
+                var props = i.GetType().GetProperties();
                 foreach (var prop in props)
                 {
                     row[prop.Name] = prop.GetValue(i, null);
@@ -47,6 +48,7 @@ namespace Migrations.WorkerService.Services.Implements
         {
             try
             {
+                Stopwatch stopwatch = Stopwatch.StartNew();
                 using var connection = new SqlConnection(_configuration.GetConnectionString("TargetConnection"));
                 connection.Open();
 
@@ -66,7 +68,9 @@ namespace Migrations.WorkerService.Services.Implements
 
                 await transaction.CommitAsync(cancellationToken);
 
-                _logger.LogInformation($"Bulk copy {dataTable.Rows.Count} items sucess");
+                stopwatch.Stop();
+
+                _logger.LogInformation($"Bulk copy {dataTable.Rows.Count} items sucess in {stopwatch.ElapsedMilliseconds} ms");
 
             }
             catch (Exception ex)
@@ -76,16 +80,18 @@ namespace Migrations.WorkerService.Services.Implements
             }
         }
 
-        public async Task ExecuteMergeDataAsync(DataTable dataTable, object destinationTable, CancellationToken cancellationToken = default)
+        public async Task<int> ExecuteMergeDataAsync(DataTable dataTable, object destinationTable, CancellationToken cancellationToken = default)
         {
             try
             {
-                
+                Stopwatch stopwatch = Stopwatch.StartNew();
+
                 var columns = GetListColumns(destinationTable); 
                 string tempTableName = "#temptable_" + Guid.NewGuid().ToString("N");
                 using var connection = new SqlConnection(_configuration.GetConnectionString("TargetConnection"));
                 connection.Open();
 
+                _logger.LogInformation($"Create temp table: {tempTableName}");
                 var sqlCreateTempTable = $"SELECT TOP 0 {string.Join(",", columns)} INTO {tempTableName} FROM {destinationTable.GetType().Name}";
                 var command = new SqlCommand(sqlCreateTempTable, connection);
                 command.CommandTimeout = 120;
@@ -108,12 +114,18 @@ namespace Migrations.WorkerService.Services.Implements
                 await bulk.WriteToServerAsync(dataTable, cancellationToken);
                 await transaction.CommitAsync(cancellationToken);
 
-                var sql = BuildMergeQuery(destinationTable.GetType().Name, tempTableName, destinationTable);
+                var mergeQuery = BuildMergeQuery(destinationTable.GetType().Name, tempTableName, destinationTable);
 
-                command.CommandText = sql;
-                await command.ExecuteNonQueryAsync(cancellationToken);
-                _logger.LogInformation(sql);
+                command.CommandText = mergeQuery;
+                _logger.LogInformation(mergeQuery);
 
+                var result = await command.ExecuteNonQueryAsync(cancellationToken);
+
+                stopwatch.Stop();
+
+                _logger.LogInformation($"Merge {result} items sucess in {stopwatch.ElapsedMilliseconds} ms");
+
+                return result;
                 
             }
             catch (Exception ex)

@@ -65,8 +65,8 @@ namespace Migrations.WorkerService
                             var userProfile = cloneUsers.FirstOrDefault();
 
                             var datatable = _databaseService.ConvertListToDatatable(cloneUsers);
-                            await _databaseService.ExecuteMergeDataAsync(datatable, userProfile, stoppingToken);
-                            _logger.LogInformation($"{cloneUsers.Count} items have been migrated");
+                            var result = await _databaseService.ExecuteMergeDataAsync(datatable, userProfile, stoppingToken);
+                            _logger.LogInformation($"{result} items have been migrated");
                            
                         }
                         else if (srcUsers.Count >  0 && srcUsers.Count < 1000)

@@ -70,10 +70,23 @@ namespace Migrations.API.Controllers
                 user.Name = Faker.Name.FullName();
                 user.Phone = Faker.Phone.Number();
                 user.Email = Faker.Internet.Email();
+                user.LastUpdatedTime = DateTime.UtcNow;
             }
 
-            _context.UserProfile.UpdateRange(users);
-            var result = await _context.SaveChangesAsync(cancellationToken);
+            var result = 0;
+
+            if (quantity < 1000)
+            {
+                _logger.LogInformation("Apply normal update");
+                _context.UserProfile.UpdateRange(users);
+                result = await _context.SaveChangesAsync(cancellationToken);
+            }
+            else
+            {
+                _logger.LogInformation("Apply bulk update");
+                var table = _databaseService.ConvertListToDatatable(users);
+                result = await _databaseService.ExecuteBulkUpdateAsync(table, users.FirstOrDefault(), cancellationToken);
+            }
             _logger.LogInformation($"{result} items have been updated");
             return Ok(result);
         }
