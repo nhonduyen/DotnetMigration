@@ -6,6 +6,7 @@ using Migrations.API.Models;
 using Faker;
 using System.ComponentModel.DataAnnotations;
 using Migrations.API.Services.Interfaces;
+using System.Collections.Concurrent;
 
 namespace Migrations.API.Controllers
 {
@@ -27,22 +28,37 @@ namespace Migrations.API.Controllers
         [HttpPost]
         public async Task<ActionResult> CreateMany(int quantity, CancellationToken cancellationToken)
         {
-            var users = new List<UserProfile>(quantity);
-            for (int i = 0; i < quantity; i++)
+            var users = new ConcurrentBag<UserProfile>();
+            var userRange = Enumerable.Range(1, quantity);
+            var userChunks = userRange.Chunk(500);
+            var tasks = new List<Task>();
+
+            foreach (var userChunk in userChunks) 
             {
-                var user = new UserProfile
+                var task = Task.Run(() =>
                 {
-                    Id = Guid.NewGuid(),
-                    Name = Faker.Name.FullName(),
-                    Phone = Faker.Phone.Number(),
-                    Email = Faker.Internet.Email(),
-                    CreatedAt = DateTime.UtcNow,
-                    LastUpdatedTime = DateTime.UtcNow
-                };
-                users.Add(user);
+                    foreach (var item in userChunk)
+                    {
+                        var user = new UserProfile
+                        {
+                            Id = Guid.NewGuid(),
+                            Name = Faker.Name.FullName(),
+                            Phone = Faker.Phone.Number(),
+                            Email = Faker.Internet.Email(),
+                            CreatedAt = DateTime.UtcNow,
+                            LastUpdatedTime = DateTime.UtcNow
+                        };
+                        users.Add(user);
+                    }
+                });
+                tasks.Add(task);
+                
             }
+            
+            await Task.WhenAll(tasks);
 
             var result = 0;
+            _logger.LogInformation($"Number of users: {users.Count}");
 
             if (quantity < 1000)
             {
@@ -52,28 +68,41 @@ namespace Migrations.API.Controllers
             }
             else
             {
-                var datatable = _databaseService.ConvertListToDatatable(users);
+                var datatable = _databaseService.ConvertListToDatatable(users.ToList());
                 await _databaseService.ExecuteBulkCopyAsync(datatable, users.FirstOrDefault(), cancellationToken);
                 result = quantity;
                 _logger.LogInformation($"Bulk copy: {result} items have been created");
             }
-            
+
             return Ok(result);
         }
 
         [HttpPut]
         public async Task<ActionResult> UpdateMany(int quantity, CancellationToken cancellationToken)
         {
+            
             var users = await _context.UserProfile.OrderBy(x => Guid.NewGuid()).Take(quantity).ToListAsync(cancellationToken);
-            foreach (var user in users)
+
+            var tasks = new List<Task>();
+            var usersChunk = users.Chunk(500);
+            foreach (var chunk in usersChunk)
             {
-                user.Name = Faker.Name.FullName();
-                user.Phone = Faker.Phone.Number();
-                user.Email = Faker.Internet.Email();
-                user.LastUpdatedTime = DateTime.UtcNow;
+                var task = Task.Run(() =>
+                {
+                    foreach (var item in chunk)
+                    {
+                        item.Name = Faker.Name.FullName();
+                        item.Phone = Faker.Phone.Number();
+                        item.Email = Faker.Internet.Email();
+                        item.LastUpdatedTime = DateTime.UtcNow;
+                    }
+                });
+                tasks.Add(task);
             }
+            await Task.WhenAll(tasks);
 
             var result = 0;
+            _logger.LogInformation($"Number of users: {users.Count}");
 
             if (quantity < 1000)
             {
