@@ -1,6 +1,9 @@
 ﻿using Microsoft.Data.SqlClient;
+using Microsoft.EntityFrameworkCore.Metadata.Internal;
 using Migrations.API.Models;
 using Migrations.API.Services.Interfaces;
+using System.ComponentModel.DataAnnotations.Schema;
+using System.ComponentModel;
 using System.Data;
 using System.Diagnostics;
 
@@ -142,9 +145,13 @@ namespace Migrations.API.Services.Implements
 
             foreach (var prop in properties)
             {
+                if (prop.CustomAttributes != null && prop.CustomAttributes.Any(x => x.AttributeType == typeof(NotMappedAttribute) || x.AttributeType == typeof(ReadOnlyAttribute)))
+                    continue;
+                if (prop.PropertyType.Namespace != nameof(System) && !prop.PropertyType.IsEnum) continue;
+
                 columns.Add(prop.Name);
             }
-            return columns;
+            return columns.Distinct().ToList();
         }
 
         private List<SqlBulkCopyColumnMapping> MappingColumns(object o)
@@ -160,14 +167,60 @@ namespace Migrations.API.Services.Implements
 
         private string BuildUpdateQuery(string src, string dest, object o)
         {
-            var columns = GetListColumns(o);
+            
             var exceptColumns = new List<string> { "Id", "CreatedAt", "RowVersion" };
+            var columns = GetListColumns(o);
 
             var updatePhase = columns.Where(c => !exceptColumns.Contains(c)).Select(x => $"{src}.{x}={dest}.{x}");
 
             var sql = string.Format(@"UPDATE {0} SET {1} FROM {0} INNER JOIN {2} ON {0}.ID = {2}.ID;", src, string.Join(",", updatePhase), dest);
 
             return sql;
+        }
+
+        public async Task<List<string>> GetDbTableColumns(string tableName, CancellationToken cancellation = default)
+        {
+            var columns = new List<string>();
+
+            using var connection = new SqlConnection(_configuration.GetConnectionString("DefaultConnection"));
+            connection.Open();
+
+            var command = new SqlCommand($"Select top 0 * from {tableName};", connection);
+            using var reader = await command.ExecuteReaderAsync(cancellation);
+
+            var tableSchemas = reader.GetSchemaTable();
+
+            foreach (DataRow row in tableSchemas.Rows)
+            {
+                columns.Add(row.Field<string>("ColumnName"));
+            }
+
+            return columns;
+        }
+
+        public DataTable ConvertListToDatatable(List<UserProfile> list, string tableName)
+        {
+            using var connection = new SqlConnection(_configuration.GetConnectionString("DefaultConnection"));
+            connection.Open();
+
+            var command = new SqlCommand($"Select top 0 * from {tableName};", connection);
+            var adapter = new SqlDataAdapter(command);
+
+            var dataTable = new DataTable(tableName);
+            adapter.Fill(dataTable);
+
+            foreach (var i in list)
+            {
+                var row = dataTable.NewRow();
+                var props = i.GetType().GetProperties().Where(x => !x.Name.Equals("RowVersion"));
+                foreach (var prop in props)
+                {
+                    row[prop.Name] = prop.GetValue(i, null);
+                }
+                dataTable.Rows.Add(row);
+            }
+
+            return dataTable;
         }
     }
 }
